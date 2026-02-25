@@ -2,6 +2,17 @@ import Foundation
 import MLXLLM
 import MLXLMCommon
 
+// MARK: - Force-load LLM factory
+
+/// Force the linker to keep MLXLLM.TrampolineModelFactory.
+/// MLXLMCommon discovers it at runtime via NSClassFromString; without a direct
+/// reference the linker dead-strips it from the static library.
+private func registerLLMFactory() {
+    ModelFactoryRegistry.shared.addTrampoline {
+        TrampolineModelFactory.modelFactory()
+    }
+}
+
 // MARK: - Logging
 
 /// Write to stderr so output is visible in Tauri dev console
@@ -148,6 +159,7 @@ private var engineInstance: MLXEngine?
 
 @_cdecl("mlx_create_engine")
 func mlx_create_engine() -> UnsafeMutableRawPointer {
+    registerLLMFactory()
     let engine = MLXEngine()
     engineInstance = engine
     mlxLog("Engine created")

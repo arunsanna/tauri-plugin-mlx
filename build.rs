@@ -108,6 +108,11 @@ fn compile_swift_macos() {
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     println!("cargo:rustc-link-lib=static=MLXInference");
 
+    // Force-load all ObjC classes from the static library.
+    // MLXLMCommon discovers MLXLLM.TrampolineModelFactory via NSClassFromString
+    // at runtime; without -ObjC the linker dead-strips it.
+    println!("cargo:rustc-link-arg=-Wl,-ObjC");
+
     // macOS frameworks required by MLX
     println!("cargo:rustc-link-lib=framework=Metal");
     println!("cargo:rustc-link-lib=framework=MetalPerformanceShaders");
