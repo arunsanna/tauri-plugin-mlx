@@ -115,12 +115,13 @@ fn compile_swift_macos() {
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
     println!("cargo:rustc-link-lib=framework=Foundation");
 
-    // Swift runtime search paths
+    // Swift runtime + compatibility library search paths
+    // Note: macOS uses "macosx" (not "macos") for the platform directory
     let candidates = [
         "/usr/lib/swift",
-        "/Library/Developer/CommandLineTools/usr/lib/swift/macos",
-        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macos",
-        "/Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macos",
+        "/Library/Developer/CommandLineTools/usr/lib/swift/macosx",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx",
+        "/Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx",
     ];
     for p in candidates {
         if std::path::Path::new(p).exists() {
