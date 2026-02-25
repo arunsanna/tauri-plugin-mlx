@@ -1,3 +1,16 @@
+## Default Permission
+
+Default permissions for the MLX inference plugin
+
+#### This default permission set includes the following:
+
+- `allow-load-model`
+- `allow-unload-model`
+- `allow-generate`
+- `allow-is-loaded`
+- `allow-get-model-info`
+- `allow-list-models`
+
 ## Permission Table
 
 <table>

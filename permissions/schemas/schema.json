@@ -365,6 +365,12 @@
           "type": "string",
           "const": "deny-unload-model",
           "markdownDescription": "Denies the unload_model command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for the MLX inference plugin\n#### This default permission set includes:\n\n- `allow-load-model`\n- `allow-unload-model`\n- `allow-generate`\n- `allow-is-loaded`\n- `allow-get-model-info`\n- `allow-list-models`",
+          "type": "string",
+          "const": "default",
+          "markdownDescription": "Default permissions for the MLX inference plugin\n#### This default permission set includes:\n\n- `allow-load-model`\n- `allow-unload-model`\n- `allow-generate`\n- `allow-is-loaded`\n- `allow-get-model-info`\n- `allow-list-models`"
         }
       ]
     }

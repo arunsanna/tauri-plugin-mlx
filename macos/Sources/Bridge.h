@@ -7,14 +7,21 @@
 /// Token streaming callback: (token_cstr, is_done, tokens_so_far, user_data)
 typedef void (*mlx_token_callback)(const char *, bool, uint32_t, void *);
 
+/// Download progress callback: (fraction_completed 0.0–1.0, user_data)
+typedef void (*mlx_progress_callback)(double, void *);
+
 /// Create the MLX engine singleton. Returns opaque pointer.
 void *mlx_create_engine(void);
 
 /// Destroy the engine and release GPU memory.
 void mlx_destroy_engine(void *engine);
 
-/// Load a model by HuggingFace repo ID.  Returns true on success.
-bool mlx_load_model(void *engine, const char *repo_id);
+/// Load a model by HuggingFace repo ID.  Streams download progress via callback.
+/// Returns true on success.
+bool mlx_load_model(void *engine,
+                    const char *repo_id,
+                    mlx_progress_callback progress_cb,
+                    void *progress_user_data);
 
 /// Unload the current model (free memory).
 void mlx_unload_model(void *engine);

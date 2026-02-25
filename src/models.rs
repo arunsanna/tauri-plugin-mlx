@@ -22,6 +22,16 @@ pub struct TokenEvent {
     pub tokens_generated: u32,
 }
 
+/// Download progress event emitted while fetching model weights.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadProgress {
+    /// Fraction completed (0.0 – 1.0)
+    pub fraction: f64,
+    /// HuggingFace repo ID being downloaded
+    pub repo_id: String,
+}
+
 /// Final generation result returned after completion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

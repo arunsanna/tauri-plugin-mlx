@@ -31,6 +31,13 @@ export interface CatalogModel {
   contextLength: number;
 }
 
+export interface DownloadProgress {
+  /** Fraction completed (0.0 – 1.0) */
+  fraction: number;
+  /** HuggingFace repo ID being downloaded */
+  repoId: string;
+}
+
 export interface GenerateOptions {
   maxTokens?: number;
   temperature?: number;
@@ -134,6 +141,27 @@ export function onToken(
   callback: (event: TokenEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<TokenEvent>("plugin:mlx:token", (event) => {
+    callback(event.payload);
+  });
+}
+
+/**
+ * Subscribe to model download progress events.
+ * Emitted while fetching model weights from HuggingFace.
+ *
+ * @example
+ * ```ts
+ * const unsub = onDownloadProgress((p) => {
+ *   console.log(`${(p.fraction * 100).toFixed(1)}% — ${p.repoId}`);
+ * });
+ * await loadModel("mlx-community/gemma-3-4b-it-4bit");
+ * unsub();
+ * ```
+ */
+export function onDownloadProgress(
+  callback: (event: DownloadProgress) => void,
+): Promise<UnlistenFn> {
+  return listen<DownloadProgress>("plugin:mlx:download-progress", (event) => {
     callback(event.payload);
   });
 }

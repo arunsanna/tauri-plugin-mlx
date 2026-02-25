@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime};
 
-use crate::models::{GenerationResult, ModelInfo, TokenEvent};
+use crate::models::{DownloadProgress, GenerationResult, ModelInfo, TokenEvent};
 
 // ---------------------------------------------------------------------------
 // FFI declarations — implemented in MLXWrapper.swift
@@ -18,7 +18,12 @@ use crate::models::{GenerationResult, ModelInfo, TokenEvent};
 extern "C" {
     fn mlx_create_engine() -> *mut std::ffi::c_void;
     fn mlx_destroy_engine(engine: *mut std::ffi::c_void);
-    fn mlx_load_model(engine: *mut std::ffi::c_void, repo_id: *const c_char) -> bool;
+    fn mlx_load_model(
+        engine: *mut std::ffi::c_void,
+        repo_id: *const c_char,
+        progress_cb: Option<extern "C" fn(f64, *mut std::ffi::c_void)>,
+        progress_user_data: *mut std::ffi::c_void,
+    ) -> bool;
     fn mlx_unload_model(engine: *mut std::ffi::c_void);
     fn mlx_is_loaded(engine: *mut std::ffi::c_void) -> bool;
     fn mlx_get_model_id(engine: *mut std::ffi::c_void) -> *mut c_char;
@@ -133,6 +138,34 @@ extern "C" fn token_callback(
 }
 
 // ---------------------------------------------------------------------------
+// Download progress callback
+// ---------------------------------------------------------------------------
+
+/// User-data passed through the C progress callback.
+struct ProgressCtx {
+    repo_id: String,
+}
+
+extern "C" fn progress_callback(fraction: f64, user_data: *mut std::ffi::c_void) {
+    if user_data.is_null() {
+        return;
+    }
+    let ctx = unsafe { &*(user_data as *const ProgressCtx) };
+    let event = DownloadProgress {
+        fraction,
+        repo_id: ctx.repo_id.clone(),
+    };
+
+    let app_handle = APP_HANDLE.lock().unwrap();
+    if let Some(app_ptr) = &*app_handle {
+        unsafe {
+            let app: &AppHandleWrapper = &*(app_ptr.0 as *const AppHandleWrapper);
+            let _ = app.emit_event("plugin:mlx:download-progress", event);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Public bridge API (called from desktop.rs)
 // ---------------------------------------------------------------------------
 
@@ -146,7 +179,25 @@ pub async fn load_model<R: Runtime>(
 
     log::info!("MLX loading model: {}", repo_id);
 
-    let success = unsafe { mlx_load_model(engine, repo_cstr.as_ptr()) };
+    let ctx = Box::new(ProgressCtx {
+        repo_id: repo_id.to_string(),
+    });
+    let ctx_ptr = Box::into_raw(ctx) as *mut std::ffi::c_void;
+
+    let success = unsafe {
+        mlx_load_model(
+            engine,
+            repo_cstr.as_ptr(),
+            Some(progress_callback),
+            ctx_ptr,
+        )
+    };
+
+    // Free the context
+    unsafe {
+        let _ = Box::from_raw(ctx_ptr as *mut ProgressCtx);
+    }
+
     if success {
         log::info!("MLX model loaded: {}", repo_id);
         Ok(())

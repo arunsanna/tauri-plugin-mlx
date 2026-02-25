@@ -48,7 +48,10 @@ final class MLXEngine {
     private var modelContainer: ModelContainer?
     private var currentRepoId: String?
 
-    func loadModel(repoId: String) -> Bool {
+    func loadModel(
+        repoId: String,
+        progressCallback: ((Double) -> Void)? = nil
+    ) -> Bool {
         unload()
         setLastError(nil)
 
@@ -63,10 +66,12 @@ final class MLXEngine {
         Task.detached { [weak self] in
             do {
                 let container = try await loadModelContainer(id: repoId) { progress in
-                    let pct = Int(progress.fractionCompleted * 100)
-                    if pct % 10 == 0 {
+                    let fraction = progress.fractionCompleted
+                    let pct = Int(fraction * 100)
+                    if pct % 5 == 0 {
                         mlxLog("Download progress: \(pct)%")
                     }
+                    progressCallback?(fraction)
                 }
                 self?.modelContainer = container
                 self?.currentRepoId = repoId
@@ -174,11 +179,24 @@ func mlx_destroy_engine(_ ptr: UnsafeMutableRawPointer) {
     mlxLog("Engine destroyed")
 }
 
+/// C callback type for download progress
+typealias CProgressCallback = @convention(c) (Double, UnsafeMutableRawPointer?) -> Void
+
 @_cdecl("mlx_load_model")
-func mlx_load_model(_ ptr: UnsafeMutableRawPointer, _ repoId: UnsafePointer<CChar>) -> Bool {
+func mlx_load_model(
+    _ ptr: UnsafeMutableRawPointer,
+    _ repoId: UnsafePointer<CChar>,
+    _ progressCb: CProgressCallback?,
+    _ progressUserData: UnsafeMutableRawPointer?
+) -> Bool {
     let engine = Unmanaged<MLXEngine>.fromOpaque(ptr).takeUnretainedValue()
     let repo = String(cString: repoId)
-    return engine.loadModel(repoId: repo)
+
+    let progressWrapper: ((Double) -> Void)? = progressCb.map { cb in
+        { fraction in cb(fraction, progressUserData) }
+    }
+
+    return engine.loadModel(repoId: repo, progressCallback: progressWrapper)
 }
 
 @_cdecl("mlx_unload_model")
