@@ -30,6 +30,18 @@ extern "C" {
         callback: extern "C" fn(*const c_char, bool, u32, *mut std::ffi::c_void),
         user_data: *mut std::ffi::c_void,
     ) -> *mut c_char;
+    fn mlx_get_last_error() -> *mut c_char;
+}
+
+/// Read and free the last error string from the Swift side.
+fn read_last_error() -> Option<String> {
+    let ptr = unsafe { mlx_get_last_error() };
+    if ptr.is_null() {
+        return None;
+    }
+    let msg = unsafe { CStr::from_ptr(ptr).to_string_lossy().to_string() };
+    unsafe { libc::free(ptr as *mut libc::c_void) };
+    Some(msg)
 }
 
 // ---------------------------------------------------------------------------
@@ -139,9 +151,11 @@ pub async fn load_model<R: Runtime>(
         log::info!("MLX model loaded: {}", repo_id);
         Ok(())
     } else {
+        let detail = read_last_error().unwrap_or_else(|| "unknown error".to_string());
+        log::error!("MLX load failed for '{}': {}", repo_id, detail);
         Err(crate::Error::LoadFailed(format!(
-            "Failed to load MLX model: {}",
-            repo_id
+            "Failed to load '{}': {}",
+            repo_id, detail
         )))
     }
 }

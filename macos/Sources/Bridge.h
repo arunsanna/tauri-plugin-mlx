@@ -33,4 +33,7 @@ char *mlx_generate(void *engine,
                          mlx_token_callback callback,
                          void *user_data);
 
+/// Get the last error message.  Returns NULL if no error.  Caller must free().
+char *mlx_get_last_error(void);
+
 #endif /* MLX_BRIDGE_H */

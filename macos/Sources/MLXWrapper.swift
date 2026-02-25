@@ -2,6 +2,33 @@ import Foundation
 import MLXLLM
 import MLXLMCommon
 
+// MARK: - Logging
+
+/// Write to stderr so output is visible in Tauri dev console
+/// (Swift print() goes to stdout which Tauri doesn't capture)
+private func mlxLog(_ message: String) {
+    let msg = "[MLXEngine] \(message)\n"
+    fputs(msg, stderr)
+    NSLog("%@", msg)
+}
+
+// MARK: - Thread-safe last error storage
+
+private var _lastError: String?
+private let _lastErrorLock = NSLock()
+
+private func setLastError(_ msg: String?) {
+    _lastErrorLock.lock()
+    _lastError = msg
+    _lastErrorLock.unlock()
+}
+
+private func getLastError() -> String? {
+    _lastErrorLock.lock()
+    defer { _lastErrorLock.unlock() }
+    return _lastError
+}
+
 // MARK: - MLX Engine
 
 /// Manages MLX model lifecycle and inference.
@@ -12,20 +39,32 @@ final class MLXEngine {
 
     func loadModel(repoId: String) -> Bool {
         unload()
+        setLastError(nil)
 
         let semaphore = DispatchSemaphore(value: 0)
         var success = false
 
-        Task {
+        mlxLog("Loading model: \(repoId)")
+
+        // Use Task.detached to avoid Swift cooperative thread pool deadlock.
+        // A regular Task {} inherits the current executor context, which can
+        // deadlock when the calling thread is blocked by the semaphore.
+        Task.detached { [weak self] in
             do {
-                // loadModelContainer downloads (if needed), caches, and builds the container
-                let container = try await loadModelContainer(id: repoId)
-                self.modelContainer = container
-                self.currentRepoId = repoId
+                let container = try await loadModelContainer(id: repoId) { progress in
+                    let pct = Int(progress.fractionCompleted * 100)
+                    if pct % 10 == 0 {
+                        mlxLog("Download progress: \(pct)%")
+                    }
+                }
+                self?.modelContainer = container
+                self?.currentRepoId = repoId
                 success = true
-                print("[MLXEngine] Model loaded: \(repoId)")
+                mlxLog("Model loaded successfully: \(repoId)")
             } catch {
-                print("[MLXEngine] Failed to load model '\(repoId)': \(error)")
+                let errorMsg = "Failed to load '\(repoId)': \(error)"
+                mlxLog(errorMsg)
+                setLastError(errorMsg)
             }
             semaphore.signal()
         }
@@ -54,7 +93,7 @@ final class MLXEngine {
         tokenCallback: @escaping (String, Bool, UInt32) -> Void
     ) -> String? {
         guard let container = modelContainer else {
-            print("[MLXEngine] No model loaded")
+            mlxLog("No model loaded")
             return nil
         }
 
@@ -62,13 +101,11 @@ final class MLXEngine {
         var fullText = ""
         var tokenCount: UInt32 = 0
 
-        Task {
+        Task.detached {
             do {
-                // Prepare input from prompt string
                 let userInput = UserInput(prompt: prompt)
                 let lmInput = try await container.prepare(input: userInput)
 
-                // Generate with streaming via AsyncStream<Generation>
                 let parameters = GenerateParameters(
                     maxTokens: maxTokens,
                     temperature: temperature
@@ -85,18 +122,15 @@ final class MLXEngine {
                         tokenCount += 1
                         tokenCallback(text, false, tokenCount)
                     case .info:
-                        // Generation complete — info carries perf stats
                         tokenCallback("", true, tokenCount)
                     case .toolCall:
-                        // Not used for plain text generation
                         break
                     }
                 }
 
-                // If stream ended without .info, signal done
                 tokenCallback("", true, tokenCount)
             } catch {
-                print("[MLXEngine] Generation error: \(error)")
+                mlxLog("Generation error: \(error)")
                 tokenCallback("", true, tokenCount)
             }
             semaphore.signal()
@@ -116,6 +150,7 @@ private var engineInstance: MLXEngine?
 func mlx_create_engine() -> UnsafeMutableRawPointer {
     let engine = MLXEngine()
     engineInstance = engine
+    mlxLog("Engine created")
     return Unmanaged.passRetained(engine).toOpaque()
 }
 
@@ -124,6 +159,7 @@ func mlx_destroy_engine(_ ptr: UnsafeMutableRawPointer) {
     let engine = Unmanaged<MLXEngine>.fromOpaque(ptr).takeRetainedValue()
     engine.unload()
     engineInstance = nil
+    mlxLog("Engine destroyed")
 }
 
 @_cdecl("mlx_load_model")
@@ -150,6 +186,13 @@ func mlx_get_model_id(_ ptr: UnsafeMutableRawPointer) -> UnsafeMutablePointer<CC
     let engine = Unmanaged<MLXEngine>.fromOpaque(ptr).takeUnretainedValue()
     guard let modelId = engine.modelId else { return nil }
     return strdup(modelId)
+}
+
+/// Return the last error message (caller must free with libc free())
+@_cdecl("mlx_get_last_error")
+func mlx_get_last_error() -> UnsafeMutablePointer<CChar>? {
+    guard let err = getLastError() else { return nil }
+    return strdup(err)
 }
 
 /// C callback type matching Bridge.h
