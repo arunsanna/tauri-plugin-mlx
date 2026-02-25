@@ -23,10 +23,10 @@ void mlx_unload_model(void *engine);
 bool mlx_is_loaded(void *engine);
 
 /// Get the repo ID of the loaded model.  Caller must free() the result.
-const char *mlx_get_model_id(void *engine);
+char *mlx_get_model_id(void *engine);
 
 /// Generate text.  Streams tokens via callback.  Returns full text (caller must free).
-const char *mlx_generate(void *engine,
+char *mlx_generate(void *engine,
                          const char *prompt,
                          int32_t max_tokens,
                          float temperature,

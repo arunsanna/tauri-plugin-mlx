@@ -11,7 +11,6 @@ final class MLXEngine {
     private var currentRepoId: String?
 
     func loadModel(repoId: String) -> Bool {
-        // Unload any existing model first
         unload()
 
         let semaphore = DispatchSemaphore(value: 0)
@@ -19,11 +18,12 @@ final class MLXEngine {
 
         Task {
             do {
-                let config = ModelConfiguration(id: repoId)
-                let container = try await ModelContainer.load(configuration: config)
+                // loadModelContainer downloads (if needed), caches, and builds the container
+                let container = try await loadModelContainer(id: repoId)
                 self.modelContainer = container
                 self.currentRepoId = repoId
                 success = true
+                print("[MLXEngine] Model loaded: \(repoId)")
             } catch {
                 print("[MLXEngine] Failed to load model '\(repoId)': \(error)")
             }
@@ -64,31 +64,36 @@ final class MLXEngine {
 
         Task {
             do {
-                let result = try await container.perform { context in
-                    let input = try await context.processor.prepare(input: .init(prompt: prompt))
-                    var output = ""
+                // Prepare input from prompt string
+                let userInput = UserInput(prompt: prompt)
+                let lmInput = try await container.prepare(input: userInput)
 
-                    // Generate tokens using MLX
-                    let generateParameters = GenerateParameters(temperature: temperature)
-                    for try await token in try context.model.generate(
-                        input: input,
-                        parameters: generateParameters
-                    ) {
-                        let tokenText = context.tokenizer.decode(tokens: [token])
-                        output += tokenText
+                // Generate with streaming via AsyncStream<Generation>
+                let parameters = GenerateParameters(
+                    maxTokens: maxTokens,
+                    temperature: temperature
+                )
+                let stream = try await container.generate(
+                    input: lmInput,
+                    parameters: parameters
+                )
+
+                for await generation in stream {
+                    switch generation {
+                    case .chunk(let text):
+                        fullText += text
                         tokenCount += 1
-                        tokenCallback(tokenText, false, tokenCount)
-
-                        if tokenCount >= maxTokens {
-                            break
-                        }
+                        tokenCallback(text, false, tokenCount)
+                    case .info:
+                        // Generation complete — info carries perf stats
+                        tokenCallback("", true, tokenCount)
+                    case .toolCall:
+                        // Not used for plain text generation
+                        break
                     }
-
-                    return output
                 }
 
-                fullText = result
-                // Signal completion
+                // If stream ended without .info, signal done
                 tokenCallback("", true, tokenCount)
             } catch {
                 print("[MLXEngine] Generation error: \(error)")
@@ -141,7 +146,7 @@ func mlx_is_loaded(_ ptr: UnsafeMutableRawPointer) -> Bool {
 }
 
 @_cdecl("mlx_get_model_id")
-func mlx_get_model_id(_ ptr: UnsafeMutableRawPointer) -> UnsafePointer<CChar>? {
+func mlx_get_model_id(_ ptr: UnsafeMutableRawPointer) -> UnsafeMutablePointer<CChar>? {
     let engine = Unmanaged<MLXEngine>.fromOpaque(ptr).takeUnretainedValue()
     guard let modelId = engine.modelId else { return nil }
     return strdup(modelId)
@@ -158,7 +163,7 @@ func mlx_generate(
     _ temperature: Float,
     _ callback: CTokenCallback,
     _ userData: UnsafeMutableRawPointer?
-) -> UnsafePointer<CChar>? {
+) -> UnsafeMutablePointer<CChar>? {
     let engine = Unmanaged<MLXEngine>.fromOpaque(ptr).takeUnretainedValue()
     let promptStr = String(cString: prompt)
 

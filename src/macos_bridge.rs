@@ -21,7 +21,7 @@ extern "C" {
     fn mlx_load_model(engine: *mut std::ffi::c_void, repo_id: *const c_char) -> bool;
     fn mlx_unload_model(engine: *mut std::ffi::c_void);
     fn mlx_is_loaded(engine: *mut std::ffi::c_void) -> bool;
-    fn mlx_get_model_id(engine: *mut std::ffi::c_void) -> *const c_char;
+    fn mlx_get_model_id(engine: *mut std::ffi::c_void) -> *mut c_char;
     fn mlx_generate(
         engine: *mut std::ffi::c_void,
         prompt: *const c_char,
@@ -29,7 +29,7 @@ extern "C" {
         temperature: f32,
         callback: extern "C" fn(*const c_char, bool, u32, *mut std::ffi::c_void),
         user_data: *mut std::ffi::c_void,
-    ) -> *const c_char;
+    ) -> *mut c_char;
 }
 
 // ---------------------------------------------------------------------------

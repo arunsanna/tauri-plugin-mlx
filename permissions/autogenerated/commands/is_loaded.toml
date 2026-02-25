@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-is-loaded"
+description = "Enables the is_loaded command without any pre-configured scope."
+commands.allow = ["is_loaded"]
+
+[[permission]]
+identifier = "deny-is-loaded"
+description = "Denies the is_loaded command without any pre-configured scope."
+commands.deny = ["is_loaded"]
