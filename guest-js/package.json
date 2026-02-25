@@ -1,0 +1,23 @@
+{
+  "name": "tauri-plugin-mlx-api",
+  "version": "0.1.0",
+  "description": "TypeScript bindings for tauri-plugin-mlx",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "peerDependencies": {
+    "@tauri-apps/api": ">=2.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "typescript": "^5.0.0"
+  }
+}

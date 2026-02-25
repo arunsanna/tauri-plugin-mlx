@@ -1,0 +1,10 @@
+target/
+node_modules/
+dist/
+dist-js/
+.build/
+macos/.build/
+*.swp
+*.swo
+.DS_Store
+Cargo.lock
